@@ -490,7 +490,9 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
 
     except KeyboardInterrupt:
         print("Keyboard interrupt!")
-
+    except Exception as e:
+        print('stopped early for exception', str(e))
+        
     return omegans,vns,wns,parns,dirs,dss
 
 #Command line arguments
