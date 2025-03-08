@@ -294,6 +294,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
             verrlast=np.inf
             muerrlast=np.inf
             omegaerrlast=np.inf
+            increases=0
             for n in range(argsdict['itmax']):
                 delta[:s]=np.real(vni-vns[-1])
                 delta[s:2*s]=np.imag(vni-vns[-1])
@@ -387,7 +388,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                 stp=np.concatenate([(np.real(vni-vns[-1])/ds),(np.imag(vni-vns[-1])/ds),[(np.real(omega-omegans[-1])/ds),(np.imag(omega-omegans[-1])/ds),(argsdict[argsdict['par']]-parns[-1])/ds]])
                 mstp=(stp.dot(M*stp)**0.5)-(stp.dot(M*dir0))
 
-                if argsdict['verbose']>0:
+                if argsdict['verbose']>1:
                     print("n=%i dv=%.3e dlambda=%.3e dmu=%.3e %s=%.6f lr=%.6f li=%.6f mstp=%.3e"%(n, verr, omegaerr, muerr, argsdict['par'], argsdict[argsdict['par']],np.real(omega),np.imag(omega),mstp))
                 if verr<argsdict['epsu'] and omegaerr<argsdict['epsl'] and muerr<argsdict['epsl'] and (steps==0 or np.abs(mstp)<argsdict['epstp']):
                     break
@@ -404,7 +405,11 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                     continue
 
                 # if n>2 and ((verr>5*verrlast and verr>argsdict['epsu']) or (muerr>5*muerrlast and muerr>argsdict['epsl']) or (omegaerr>5*omegaerrlast and omegaerr>argsdict['epsl'])):
-                if n>2 and ((muerr>5*muerrlast and muerr>argsdict['epsl']) or (omegaerr>5*omegaerrlast and omegaerr>argsdict['epsl'])):
+
+                if ((verr>5*verrlast and verr>argsdict['epsu']) or (muerr>5*muerrlast and muerr>argsdict['epsl']) or (omegaerr>5*omegaerrlast and omegaerr>argsdict['epsl'])):
+                    increases=increases+1
+                if increases>2:
+                    increases=0
                     break
 
                 verrlast=verr
@@ -481,7 +486,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                 ds=ds/1.5
                 if argsdict['verbose']>0:
                     print('Convergence failure!')
-                    print("ds=%.3e dv=%.3e dlambda=%.3e dmu=%.3e stp=(%.3f,%.3f,%.3f) mstp=%.3e"%(ds, verr, omegaerr, muerr, stp[-3],stp[-2],stp[-1],mstp))
+                    print("n=%i ds=%.3e dv=%.3e dlambda=%.3e dmu=%.3e stp=(%.3f,%.3f,%.3f) mstp=%.3e"%(n, ds, verr, omegaerr, muerr, stp[-3],stp[-2],stp[-1],mstp))
 
                 if np.abs(ds)<argsdict['dsmin']:
                     if argsdict['verbose']>0:
@@ -492,7 +497,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
         print("Keyboard interrupt!")
     except Exception as e:
         print('stopped early for exception', str(e))
-        
+
     return omegans,vns,wns,parns,dirs,dss
 
 #Command line arguments
