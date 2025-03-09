@@ -214,7 +214,8 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
     s=E_n.shape[0]
     if M is None:
         M=np.zeros(2*s+3)
-        M[2*s:]=argsdict['thl']
+        M[2*s:2*s+2]=argsdict['thl']
+        M[2*s+2:]=argsdict['thmu']
         M[:2*s]=argsdict['thu']
 
     def makejac(v,T,Tlambdav,Tmuv,dir):
@@ -288,7 +289,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
             verr=np.linalg.norm(dv,ord=np.inf)/(1+np.linalg.norm(vni,ord=np.inf))
             stp=np.concatenate([(np.real(vni-vns[-1])/ds),(np.imag(vni-vns[-1])/ds),[(np.real(omega-omegans[-1])/ds),(np.imag(omega-omegans[-1])/ds),(argsdict[argsdict['par']]-parns[-1])/ds]])
             mstp=(stp.dot(M*stp)**0.5)-(stp.dot(M*dir0))
-            if argsdict['verbose']>0:
+            if argsdict['verbose']>1:
                 print("pre dv=%.3e dlambda=%.3e dmu=%.3e %s=%.6f lr=%.6f li=%.6f mstp=%.3e"%(verr, omegaerr, muerr, argsdict['par'], argsdict[argsdict['par']],np.real(omega),np.imag(omega),mstp))
 
             verrlast=np.inf
@@ -318,7 +319,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                     res=(b.astype(np.float128)-C.astype(np.float128).dot(delta.astype(np.float128))).astype(np.float64)
                     cor=lu_solve((lu,piv),res)
                     deltaerr=np.linalg.norm(cor,ord=np.inf)/(1+np.linalg.norm(delta,ord=np.inf))
-                    if argsdict['verbose']>1:
+                    if argsdict['verbose']>2:
                         print("m=%i deltaerr=%.3e res=%.3e"%(m,deltaerr,np.linalg.norm(res)))
                     if deltaerr<argsdict['epsu'] or deltaerr>lasterr:
                         break
@@ -349,7 +350,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                     res=(E_omega.dot(vni).astype(np.complex256)-E_n.astype(np.complex256).dot(xi.astype(np.complex256))).astype(np.complex128)
                     cor=lu_solve((lu2,piv2),res)
                     xierr=np.linalg.norm(cor,ord=np.inf)/(1+np.linalg.norm(xi,ord=np.inf))
-                    if argsdict['verbose']>1:
+                    if argsdict['verbose']>2:
                         print("m=%i xierr=%.3e res=%.3e"%(m,xierr,np.linalg.norm(res)))
 
                     if xierr<argsdict['epsu'] or xierr>lasterr:
@@ -365,7 +366,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                     res=(E_omega.T.dot(wni).astype(np.complex256)-E_n.T.astype(np.complex256).dot(zeta.astype(np.complex256))).astype(np.complex128)
                     cor=lu_solve((lu2,piv2),res,trans=1)
                     zetaerr=np.linalg.norm(cor,ord=np.inf)/(1+np.linalg.norm(zeta,ord=np.inf))
-                    if argsdict['verbose']>1:
+                    if argsdict['verbose']>2:
                         print("m=%i zetaerr=%.3e res=%.3e"%(m,zetaerr,np.linalg.norm(res)))
 
                     if zetaerr<argsdict['epsu'] or zetaerr>lasterr:
@@ -390,10 +391,10 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
 
                 if argsdict['verbose']>1:
                     print("n=%i dv=%.3e dlambda=%.3e dmu=%.3e %s=%.6f lr=%.6f li=%.6f mstp=%.3e"%(n, verr, omegaerr, muerr, argsdict['par'], argsdict[argsdict['par']],np.real(omega),np.imag(omega),mstp))
-                if verr<argsdict['epsu'] and omegaerr<argsdict['epsl'] and muerr<argsdict['epsl'] and (steps==0 or np.abs(mstp)<argsdict['epstp']):
+                if verr<argsdict['epsu'] and omegaerr<argsdict['epsl'] and muerr<argsdict['epsl'] and (steps<5 or np.abs(mstp)<argsdict['epstp']):
                     break
 
-                if (steps>0 and np.abs(mstp)>argsdict['epstp']):
+                if (steps>=5 and np.abs(mstp)>argsdict['epstp']):
                     if argsdict['verbose']>1:
                         print('Reject')
                     vni=vold
@@ -416,7 +417,9 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                 muerrlast=muerr
                 omegaerrlast=omegaerr
 
-            if verr<argsdict['epsu'] and omegaerr<argsdict['epsl'] and muerr<argsdict['epsl'] and (steps==0 or np.abs(mstp)<argsdict['epstp']):
+            # print(verr, omegaerr, muerr, steps, np.abs(mstp))
+            # print(verr<argsdict['epsu'], omegaerr<argsdict['epsl'], muerr<argsdict['epsl'], (steps<5 or np.abs(mstp)<argsdict['epstp']))
+            if verr<argsdict['epsu'] and omegaerr<argsdict['epsl'] and muerr<argsdict['epsl'] and (steps<5 or np.abs(mstp)<argsdict['epstp']):
 
                 E_n,E_omega,E_mu=makesys(omega,argsdict)
                 C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
@@ -433,7 +436,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                     res=(b.astype(np.float128)-C.astype(np.float128).dot(dir0.astype(np.float128))).astype(np.float64)
                     cor=lu_solve((lu,piv),res)
                     direrr=np.linalg.norm(M*cor,ord=np.inf)/(1+np.linalg.norm(M*dir0,ord=np.inf))
-                    if argsdict['verbose']>1:
+                    if argsdict['verbose']>2:
                         print("m=%i direrr=%.3e res=%.3e"%(m,direrr,np.linalg.norm(res)))
 
                     if direrr<argsdict['epdir'] or direrr>lasterr:
@@ -446,7 +449,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                 ddir=dir1-dir0
                 # deltadir=np.abs(dir0.dot(ddir)/np.linalg.norm(dir0)**2)
                 deltadir=dir0.dot(M*ddir)
-                if argsdict['verbose']:
+                if argsdict['verbose']>1:
                     print('deltadir=%.3e stp=(%.3f,%.3f,%.3f) newdir=(%.3f, %.3f, %.3f)'%(deltadir,dir1[-3],dir1[-2],dir1[-1],dir0[2*s],dir0[2*s+1],dir0[2*s+2]))
 
                 if direrr>argsdict['epdir'] or np.abs(deltadir)>argsdict['epdir']:
@@ -532,6 +535,7 @@ parser.add_argument("--lambdamax", type=float, required=False, default=np.inf, d
 parser.add_argument("--epstp", type=float, required=False, default=1E0, dest='epstp', help='Step direction tolerance')
 parser.add_argument("--epdir", type=float, required=False, default=1E-3, dest='epdir', help='Direction vector tolerance')
 parser.add_argument("--thl", type=float, required=False, default=1, dest='thl', help='Pseudoarclength weight for parameters and eigenvalues.')
+parser.add_argument("--thmu", type=float, required=False, default=1, dest='thl', help='Pseudoarclength weight for parameters and eigenvalues.')
 parser.add_argument("--thu", type=float, required=False, default=1E-3, dest='thu', help='Pseudoarclength weight for eigenvectors.')
 parser.add_argument("--stpweight", type=float, required=False, default=1, dest='stpweight', help='Weight for previous step.')
 parser.add_argument("--verbose", type=int, required=False, default=True,
