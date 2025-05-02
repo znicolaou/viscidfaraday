@@ -476,7 +476,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                         scount=0
 
                 if argsdict['verbose']>0:
-                    print("ds=%.3e %s=%.6f lambda=%.6f+%.6fi stp=(%.3f,%.3f,%.3f) mstp=%.3e"%(ds, argsdict['par'], argsdict[argsdict['par']], np.real(omegans[-1]),np.imag(omegans[-1]), stp[-3],stp[-2],stp[-1],mstp))
+                    print("ds=%.3e its=%i %s=%.6f lambda=%.6f+%.6fi stp=(%.3f,%.3f,%.3f) mstp=%.3e"%(ds, n, argsdict['par'], argsdict[argsdict['par']], np.real(omegans[-1]),np.imag(omegans[-1]), stp[-3],stp[-2],stp[-1],mstp))
 
             else:
                 scount=0
@@ -535,7 +535,7 @@ parser.add_argument("--lambdamax", type=float, required=False, default=np.inf, d
 parser.add_argument("--epstp", type=float, required=False, default=1E0, dest='epstp', help='Step direction tolerance')
 parser.add_argument("--epdir", type=float, required=False, default=1E-3, dest='epdir', help='Direction vector tolerance')
 parser.add_argument("--thl", type=float, required=False, default=1, dest='thl', help='Pseudoarclength weight for parameters and eigenvalues.')
-parser.add_argument("--thmu", type=float, required=False, default=1, dest='thl', help='Pseudoarclength weight for parameters and eigenvalues.')
+parser.add_argument("--thmu", type=float, required=False, default=1, dest='thmu', help='Pseudoarclength weight for parameters and eigenvalues.')
 parser.add_argument("--thu", type=float, required=False, default=1E-3, dest='thu', help='Pseudoarclength weight for eigenvectors.')
 parser.add_argument("--stpweight", type=float, required=False, default=1, dest='stpweight', help='Weight for previous step.')
 parser.add_argument("--verbose", type=int, required=False, default=True,
