@@ -178,7 +178,7 @@ def rayleigh_mat(omega_0, v0, w0, mat, argsdict, mat2=None):
     return omegas,vns,wns
 
 #pseudoarclength continuation with rayleigh quotient refinement
-def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=None):
+def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir=None,real=False):
     # if argsdict['verbose']:
     #     print(argsdict)
     omegans=[omega]
@@ -212,11 +212,11 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
     E_n,E_omega,E_mu=makesys(omega,argsdict)
 
     s=E_n.shape[0]
-    if M is None:
-        M=np.zeros(2*s+3)
-        M[2*s:2*s+2]=argsdict['thl']
-        M[2*s+2:]=argsdict['thmu']
-        M[:2*s]=argsdict['thu']
+    if Theta is None:
+        Theta=np.zeros(2*s+3)
+        Theta[2*s:2*s+2]=argsdict['thl']
+        Theta[2*s+2:]=argsdict['thmu']
+        Theta[:2*s]=argsdict['thu']
 
     def makejac(v,T,Tlambdav,Tmuv,dir):
         C=np.zeros((2*s+3,2*s+3),dtype=np.float64)
@@ -224,25 +224,25 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
         C[s:2*s,:s]=np.imag(T)
         C[2*s,:s]=np.real(v)
         C[2*s+1,:s]=np.imag(v)
-        C[2*s+2,:s]=dir[:s]*M[:s]
+        C[2*s+2,:s]=dir[:s]*Theta[:s]
 
         C[:s,s:2*s]=-np.imag(T)
         C[s:2*s,s:2*s]=np.real(T)
         C[2*s,s:2*s]=-np.imag(v)
         C[2*s+1,s:2*s]=np.real(v)
-        C[2*s+2,s:2*s]=dir[s:2*s]*M[s:2*s]
+        C[2*s+2,s:2*s]=dir[s:2*s]*Theta[s:2*s]
 
         C[:s,2*s]=np.real(Tlambdav)
         C[s:2*s,2*s]=np.imag(Tlambdav)
-        C[2*s+2,2*s]=dir[2*s]*M[2*s]
+        C[2*s+2,2*s]=dir[2*s]*Theta[2*s]
 
         C[:s,2*s+1]=-np.imag(Tlambdav)
         C[s:2*s,2*s+1]=np.real(Tlambdav)
-        C[2*s+2,2*s+1]=dir[2*s+1]*M[2*s+1]
+        C[2*s+2,2*s+1]=dir[2*s+1]*Theta[2*s+1]
 
         C[:s,2*s+2]=np.real(Tmuv)
         C[s:2*s,2*s+2]=np.imag(Tmuv)
-        C[2*s+2,2*s+2]=dir[2*s+2]*M[2*s+2]
+        C[2*s+2,2*s+2]=dir[2*s+2]*Theta[2*s+2]
         lu,piv=lu_factor(C)
         return C,lu,piv
 
@@ -258,14 +258,14 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
         b[:-1]=0
         b[-1]=1
         dir0=lu_solve((lu,piv),b)
-        dir0=dir0/(dir0.dot(M*dir0))**0.5
+        dir0=dir0/(dir0.dot(Theta*dir0))**0.5
         if argsdict['verbose']>0:
             print("newdir=(%.3f,%.3f,%.3f)"%(dir0[2*s],dir0[2*s+1],dir0[2*s+2]))
 
         dirs=[dir0.copy()]
     else:
         dir0=dir.copy()
-        # dir0=dir0/(dir0.dot(M*dir0))**0.5
+        # dir0=dir0/(dir0.dot(Theta*dir0))**0.5
         dirs=[dir0.copy()]
 
     scount=0
@@ -288,7 +288,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
             muerr=np.abs(dmu)/(1+np.abs(argsdict[argsdict['par']]))
             verr=np.linalg.norm(dv,ord=np.inf)/(1+np.linalg.norm(vni,ord=np.inf))
             stp=np.concatenate([(np.real(vni-vns[-1])/ds),(np.imag(vni-vns[-1])/ds),[(np.real(omega-omegans[-1])/ds),(np.imag(omega-omegans[-1])/ds),(argsdict[argsdict['par']]-parns[-1])/ds]])
-            mstp=(stp.dot(M*stp)**0.5)-(stp.dot(M*dir0))
+            mstp=(stp.dot(Theta*stp)**0.5)-(stp.dot(Theta*dir0))
             if argsdict['verbose']>1:
                 print("pre dv=%.3e dlambda=%.3e dmu=%.3e %s=%.6f lr=%.6f li=%.6f mstp=%.3e"%(verr, omegaerr, muerr, argsdict['par'], argsdict[argsdict['par']],np.real(omega),np.imag(omega),mstp))
 
@@ -308,7 +308,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                 b[s:2*s]=-np.imag(Tv)
                 b[2*s]=0
                 b[2*s+1]=0
-                b[2*s+2]=ds-delta.dot(M*dir0)
+                b[2*s+2]=ds-delta.dot(Theta*dir0)
                 C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
                 delta=lu_solve((lu,piv),b)
                 # iterative refinement for delta
@@ -326,6 +326,8 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                     delta=delta+cor
                     lasterr=deltaerr
 
+                if real:
+                    delta[2*s+1]=0
                 domega=delta[2*s]+1j*delta[2*s+1]
                 dmu=delta[2*s+2]
                 dv=delta[:s]+1j*delta[s:2*s]
@@ -377,8 +379,11 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                 vni=xi/np.linalg.norm(xi)*np.abs(xi.dot(np.conjugate(vni)))/(xi.dot(np.conjugate(vni)))
                 wni=zeta/np.linalg.norm(zeta)*np.abs(zeta.dot(np.conjugate(wni)))/(zeta.dot(np.conjugate(wni)))
 
-                omega+=-E_n.dot(vni).dot(wni)/E_omega.dot(vni).dot(wni)
-                domega+=-E_n.dot(vni).dot(wni)/E_omega.dot(vni).dot(wni)
+                ddomega=-E_n.dot(vni).dot(wni)/E_omega.dot(vni).dot(wni)
+                domega+=ddomega
+                if real:
+                    ddomega=np.real(ddomega)
+                omega+=ddomega
                 E_n,E_omega,E_mu=makesys(omega,argsdict)
 
                 omegaerr=np.abs(domega)/(1+np.abs(omega))
@@ -387,7 +392,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
 
                 verr=np.linalg.norm(dv,ord=np.inf)/(1+np.linalg.norm(vni,ord=np.inf))
                 stp=np.concatenate([(np.real(vni-vns[-1])/ds),(np.imag(vni-vns[-1])/ds),[(np.real(omega-omegans[-1])/ds),(np.imag(omega-omegans[-1])/ds),(argsdict[argsdict['par']]-parns[-1])/ds]])
-                mstp=(stp.dot(M*stp)**0.5)-(stp.dot(M*dir0))
+                mstp=(stp.dot(Theta*stp)**0.5)-(stp.dot(Theta*dir0))
 
                 if argsdict['verbose']>1:
                     print("n=%i dv=%.3e dlambda=%.3e dmu=%.3e %s=%.6f lr=%.6f li=%.6f mstp=%.3e"%(n, verr, omegaerr, muerr, argsdict['par'], argsdict[argsdict['par']],np.real(omega),np.imag(omega),mstp))
@@ -425,7 +430,10 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                 C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
                 b[:-1]=0
                 b[-1]=1
-                dir0=lu_solve((lu,piv),b)
+                #dir0=lu_solve((lu,piv),b)
+
+                dir1=stp/(stp.dot(Theta*stp))**0.5*np.sign(dirs[-1].dot(Theta*stp))
+                dir0=argsdict['stpweight']*dir1+(1-argsdict['stpweight'])*dirs[-1]
 
                 # iterative refinement for direction vector
                 direrr=0
@@ -435,7 +443,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                 for m in range(argsdict['itmax']):
                     res=(b.astype(np.float128)-C.astype(np.float128).dot(dir0.astype(np.float128))).astype(np.float64)
                     cor=lu_solve((lu,piv),res)
-                    direrr=np.linalg.norm(M*cor,ord=np.inf)/(1+np.linalg.norm(M*dir0,ord=np.inf))
+                    direrr=np.linalg.norm(Theta*cor,ord=np.inf)/(1+np.linalg.norm(Theta*dir0,ord=np.inf))
                     if argsdict['verbose']>2:
                         print("m=%i direrr=%.3e res=%.3e"%(m,direrr,np.linalg.norm(res)))
 
@@ -444,20 +452,26 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, M=None, dir=Non
                     dir0=dir0+cor
                     lasterr=direrr
 
-                dir0=dir0/(dir0.dot(M*dir0))**0.5*np.sign(dirs[-1].dot(M*dir0))
-                dir1=stp/(stp.dot(M*stp))**0.5*np.sign(dirs[-1].dot(M*stp))
+                dir0=dir0/(dir0.dot(Theta*dir0))**0.5*np.sign(dirs[-1].dot(Theta*dir0))
+                dir1=stp/(stp.dot(Theta*stp))**0.5*np.sign(dirs[-1].dot(Theta*stp))
                 ddir=dir1-dir0
                 # deltadir=np.abs(dir0.dot(ddir)/np.linalg.norm(dir0)**2)
-                deltadir=dir0.dot(M*ddir)
+                deltadir=dir0.dot(Theta*ddir)
                 if argsdict['verbose']>1:
                     print('deltadir=%.3e stp=(%.3f,%.3f,%.3f) newdir=(%.3f, %.3f, %.3f)'%(deltadir,dir1[-3],dir1[-2],dir1[-1],dir0[2*s],dir0[2*s+1],dir0[2*s+2]))
 
+                '''
                 if direrr>argsdict['epdir'] or np.abs(deltadir)>argsdict['epdir']:
                     # if poor direction vector convergence, use last stp
                     # dir0=(dirs[-1]+dir1)/2 #Bias to last step...bad for curvature
                     # dir0=2*dir1-dirs[-1] #Try to extrapolate...may be unstable
+                    print('using stp for dir')
                     dir0=argsdict['stpweight']*dir1+(1-argsdict['stpweight'])*dirs[-1]
-                    dir0=dir0/(dir0.dot(M*dir0))**0.5*np.sign(dirs[-1].dot(M*dir0))
+                    dir0=dir0/(dir0.dot(Theta*dir0))**0.5*np.sign(dirs[-1].dot(Theta*dir0))
+                '''
+                if real:
+                    dir0[2*s+1]=0
+                    dir0=dir0/(dir0.dot(Theta*dir0))**0.5*np.sign(dirs[-1].dot(Theta*dir0))
 
                 steps+=1
                 omegans=omegans+[omega]
