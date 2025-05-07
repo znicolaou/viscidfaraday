@@ -259,12 +259,13 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
     b=np.zeros((2*s+3),dtype=np.float64)
     delta=np.zeros(2*s+3,dtype=np.float64)
 
-    C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
+    C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0, inds)
 
     if dir is None:
         b[:-1]=0
         b[-1]=1
-        dir0=lu_solve((lu,piv),b)
+        dir0=np.zeros(2*s+3)
+        dir0[inds]=lu_solve((lu,piv),b[inds])
         dir0=dir0/(dir0.dot(Theta*dir0))**0.5
         if argsdict['verbose']>0:
             print("newdir=(%.3f,%.3f,%.3f)"%(dir0[2*s],dir0[2*s+1],dir0[2*s+2]))
@@ -316,19 +317,19 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
                 b[2*s]=0
                 b[2*s+1]=0
                 b[2*s+2]=ds-delta.dot(Theta*dir0)
-                C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
-                delta=lu_solve((lu,piv),b)
-                '''
+                C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0, inds)
+                delta=np.zeros(2*s+3)
+                delta[inds]=lu_solve((lu,piv),b[inds])
+
                 # iterative refinement for delta
                 deltaerr=0
                 lastcor=delta
                 lasterr=np.inf
+                cor=np.zeros(2*s+3)
                 for m in range(argsdict['itmax']):
                     #res=(b.astype(np.float128)-C.astype(np.float128).dot(delta.astype(np.float128))).astype(np.float64)
                     res2=b[inds]-C[inds][:,inds].dot(delta[inds])
-                    cor2=lu_solve(lu2,piv2),res2)
-                    cor=np.zeros(2*s+3)
-                    cor[inds]=cor2
+                    cor[inds]=lu_solve(lu2,piv2),res2)
                     deltaerr=np.linalg.norm(cor,ord=np.inf)/(1+np.linalg.norm(delta,ord=np.inf))
                     if argsdict['verbose']>2:
                         print("m=%i deltaerr=%.3e res=%.3e"%(m,deltaerr,np.linalg.norm(res)))
@@ -336,7 +337,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
                         break
                     delta=delta+cor
                     lasterr=deltaerr
-                '''
+
                 if real > 0:
                     delta[2*s+1]=0
                 if real < 0:
@@ -443,27 +444,13 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
             if verr<argsdict['epsu'] and omegaerr<argsdict['epsl'] and muerr<argsdict['epsl'] and (steps<5 or np.abs(mstp)<argsdict['epstp']):
 
                 E_n,E_omega,E_mu=makesys(omega,argsdict)
-                C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
+                C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0,inds)
                 b[:-1]=0
                 b[-1]=1
                 
-                '''
-                dir0=np.zeros(2*s+3)
-                inds=np.concatenate([np.arange(2*s+1),[2*s+2]])
-                lu2,piv2=lu_factor(C[inds][:,inds])
-                dir0[inds]=lu_solve((lu2,piv2),b[inds])
-                '''
-                
+
                 dir1=stp/(stp.dot(Theta*stp))**0.5*np.sign(dirs[-1].dot(Theta*stp))
                 dir0=argsdict['stpweight']*dir1+(1-argsdict['stpweight'])*dirs[-1]
-                if real>0:
-                    lu2,piv2=lu_factor(C[inds][:,inds])
-                    dir0[2*s+1]=0
-                    dir0=dir0/dir0.dot(Theta*dir0)
-                if real<0:
-                    lu2,piv2=lu_factor(C[inds][:,inds])
-                    dir0[2*s]=0
-                    dir0=dir0/dir0.dot(Theta*dir0)
                 
                 # iterative refinement for direction vector
                 direrr=0
@@ -471,14 +458,10 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
                 lasterr=np.inf
                 for m in range(argsdict['itmax']):
                     #res=(b.astype(np.float128)-C.astype(np.float128).dot(dir0.astype(np.float128))).astype(np.float64)
-                    if real:
-                        res=b[inds]-C[inds][:,inds].dot(dir0[inds])
-                        cor=np.zeros(2*s+3)
-                        cor2=lu_solve((lu2,piv2),res)
-                        cor[inds]=cor2
-                    else:
-                        res=b-C.dot(dir0)
-                        cor=lu_solve((lu,piv),res)
+                    res=b[inds]-C[inds][:,inds].dot(dir0[inds])
+                    cor=np.zeros(2*s+3)
+                    cor[inds]=lu_solve((lu2,piv2),res)
+
                     direrr=np.linalg.norm(Theta*cor,ord=np.inf)/(1+np.linalg.norm(Theta*dir0,ord=np.inf))
                     if argsdict['verbose']>2:
                         print("m=%i direrr=%.3e res=%.3e"%(m,direrr,np.linalg.norm(res)))
