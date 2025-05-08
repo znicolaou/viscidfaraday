@@ -423,10 +423,6 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
 
                 dir0=dir0/(dir0.dot(Theta*dir0))**0.5*np.sign(dirs[-1].dot(Theta*dir0))
                 
-                if not os.path.exists('C1.npy'):
-                    np.save('C1.npy',C)
-                    np.save('b1.npy',b)
-                    np.save('dir1.npy',dir0)
                 dir1=stp/(stp.dot(Theta*stp))**0.5*np.sign(dirs[-1].dot(Theta*stp))
                 ddir=dir1-dir0
                 deltadir=dir0.dot(Theta*ddir)
