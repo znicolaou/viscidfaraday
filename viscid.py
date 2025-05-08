@@ -5,6 +5,7 @@ import json
 import os
 import timeit
 import sys
+import traceback
 from scipy.linalg import eig,lu_factor,lu_solve
 from scipy.special import iv
 from scipy.interpolate import interp1d
@@ -54,9 +55,6 @@ def viscid_mat2d (omega, argsdict):
     vals21 = 1j*(-2*argsdict['mu']*kappay*(kappax*kappapx+kappay*kappapy)/kappa*S/(argsdict['rho']*Omega+argsdict['mu']*kappa**2)+kappapy*Stilde/(argsdict['rho']*Omega/argsdict['mu'])**0.5)
     vals22 = (kappax*kappapx+kappay*kappapy)*(-argsdict['mu']*(Ctilde-Stilde)+(argsdict['rho']*Omega + argsdict['mu']*kappa**2)*C/(2*kappa**2)+(argsdict['g']*argsdict['rho']**2+kappa**2*(argsdict['rho']*argsdict['sigma']-4*argsdict['mu']**2*(argsdict['rho'] * Omega/argsdict['mu'])**0.5))*S/(2*kappa*(argsdict['rho']*Omega+argsdict['mu']*kappa**2)))
 
-    # rfac0=EmOmega*(argsdict['rho']*Omega+argsdict['mu']*kappa**2)
-    # rfac1=EmOmega*(argsdict['rho']*Omega+argsdict['mu']*kappa**2)
-    # rfac2=4*(argsdict['rho']*Omega + argsdict['mu']*kappa**2)
     rfac0=EmOmega
     rfac1=EmOmega
     rfac2=1
@@ -178,9 +176,7 @@ def rayleigh_mat(omega_0, v0, w0, mat, argsdict, mat2=None):
     return omegas,vns,wns
 
 #pseudoarclength continuation with rayleigh quotient refinement
-def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir=None,real=False):
-    # if argsdict['verbose']:
-    #     print(argsdict)
+def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir=None,real=0):
     omegans=[omega]
     vns=[v.copy()]
     wns=[w.copy()]
@@ -217,32 +213,31 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
         Theta[2*s:2*s+2]=argsdict['thl']
         Theta[2*s+2:]=argsdict['thmu']
         Theta[:2*s]=argsdict['thu']
-
-    def makejac(v,T,Tlambdav,Tmuv,dir):
+    def makejac(v,T,Tlambdav,Tmuv,dir0):
         C=np.zeros((2*s+3,2*s+3),dtype=np.float64)
         C[:s,:s]=np.real(T)
         C[s:2*s,:s]=np.imag(T)
         C[2*s,:s]=np.real(v)
         C[2*s+1,:s]=np.imag(v)
-        C[2*s+2,:s]=dir[:s]*Theta[:s]
+        C[2*s+2,:s]=dir0[:s]*Theta[:s]
 
         C[:s,s:2*s]=-np.imag(T)
         C[s:2*s,s:2*s]=np.real(T)
         C[2*s,s:2*s]=-np.imag(v)
         C[2*s+1,s:2*s]=np.real(v)
-        C[2*s+2,s:2*s]=dir[s:2*s]*Theta[s:2*s]
+        C[2*s+2,s:2*s]=dir0[s:2*s]*Theta[s:2*s]
 
         C[:s,2*s]=np.real(Tlambdav)
         C[s:2*s,2*s]=np.imag(Tlambdav)
-        C[2*s+2,2*s]=dir[2*s]*Theta[2*s]
+        C[2*s+2,2*s]=dir0[2*s]*Theta[2*s]
 
         C[:s,2*s+1]=-np.imag(Tlambdav)
         C[s:2*s,2*s+1]=np.real(Tlambdav)
-        C[2*s+2,2*s+1]=dir[2*s+1]*Theta[2*s+1]
+        C[2*s+2,2*s+1]=dir0[2*s+1]*Theta[2*s+1]
 
         C[:s,2*s+2]=np.real(Tmuv)
         C[s:2*s,2*s+2]=np.imag(Tmuv)
-        C[2*s+2,2*s+2]=dir[2*s+2]*Theta[2*s+2]
+        C[2*s+2,2*s+2]=dir0[2*s+2]*Theta[2*s+2]
         lu,piv=lu_factor(C)
         return C,lu,piv
 
@@ -250,13 +245,21 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
     dir0=np.zeros(2*s+3,dtype=np.float64)
     dir0[-1]=1
     b=np.zeros((2*s+3),dtype=np.float64)
+    b[-1]=1
+    
     delta=np.zeros(2*s+3,dtype=np.float64)
+    if real>0:
+        inds=np.concatenate([np.arange(2*s+1),[2*s+2]])
+    elif real<0:
+        inds=np.concatenate([np.arange(2*s),[2*s+1,2*s+2]])
+    else:
+        inds=np.arange(2*s+3)
+
 
     C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
 
-    if dir is None:
-        b[:-1]=0
-        b[-1]=1
+    if dir is None:    
+        dir0=np.zeros(2*s+3)
         dir0=lu_solve((lu,piv),b)
         dir0=dir0/(dir0.dot(Theta*dir0))**0.5
         if argsdict['verbose']>0:
@@ -265,8 +268,31 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
         dirs=[dir0.copy()]
     else:
         dir0=dir.copy()
-        # dir0=dir0/(dir0.dot(Theta*dir0))**0.5
+        dir0=dir0/(dir0.dot(Theta*dir0))**0.5
         dirs=[dir0.copy()]
+
+    direrr=0
+    lastcor=dir0
+    lasterr=np.inf
+    cor=np.zeros(2*s+3)
+    for m in range(argsdict['itmax']):
+        res=(b-C.dot(dir0))
+        cor=lu_solve((lu,piv),res)
+        if real>0:
+            cor[2*s+1]=0
+        elif real<0:
+            cor[2*s]=0
+        direrr=cor.dot(Theta*cor)
+        if argsdict['verbose']>2:
+            print("m=%i direrr=%.3e res=%.3e"%(m,direrr,np.linalg.norm(res)))
+
+#         if direrr<argsdict['epdir'] or (m>3 and direrr>lasterr):
+        if (m>3 and direrr>lasterr):
+            break
+        dir0=dir0+cor
+        dir0=dir0/(dir0.dot(Theta*dir0))**0.5
+        C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
+        lasterr=direrr
 
     scount=0
     steps=0
@@ -310,24 +336,30 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
                 b[2*s+1]=0
                 b[2*s+2]=ds-delta.dot(Theta*dir0)
                 C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
+                delta=np.zeros(2*s+3)
                 delta=lu_solve((lu,piv),b)
                 # iterative refinement for delta
-                deltaerr=0
-                lastcor=delta
-                lasterr=np.inf
-                for m in range(argsdict['itmax']):
-                    res=(b.astype(np.float128)-C.astype(np.float128).dot(delta.astype(np.float128))).astype(np.float64)
-                    cor=lu_solve((lu,piv),res)
-                    deltaerr=np.linalg.norm(cor,ord=np.inf)/(1+np.linalg.norm(delta,ord=np.inf))
-                    if argsdict['verbose']>2:
-                        print("m=%i deltaerr=%.3e res=%.3e"%(m,deltaerr,np.linalg.norm(res)))
-                    if deltaerr<argsdict['epsu'] or deltaerr>lasterr:
-                        break
-                    delta=delta+cor
-                    lasterr=deltaerr
-
-                if real:
+#                 deltaerr=0
+#                 lastcor=delta.copy()
+#                 lasterr=np.inf
+#                 cor=np.zeros(2*s+3)
+#                 for m in range(argsdict['itmax']):
+#                     res=(b-C.dot(delta))
+#                     cor=lu_solve((lu,piv),res)
+#                     deltaerr=np.linalg.norm(cor,ord=np.inf)/(1+np.linalg.norm(delta,ord=np.inf))
+#                     if argsdict['verbose']>2:
+#                         print("m=%i deltaerr=%.3e res=%.3e"%(m,deltaerr,np.linalg.norm(res)))
+#                     if deltaerr<argsdict['epsu'] or deltaerr>lasterr:
+#                         break
+#                     delta=delta+cor
+#                     lasterr=deltaerr.copy()
+                
+                if real>0:
                     delta[2*s+1]=0
+                if real<0:
+                    delta[2*s]=0
+                
+
                 domega=delta[2*s]+1j*delta[2*s+1]
                 dmu=delta[2*s+2]
                 dv=delta[:s]+1j*delta[s:2*s]
@@ -344,45 +376,17 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
 
                 # rayleigh quotient refinement at fixed mu
                 xi=lu_solve((lu2,piv2),E_omega.dot(vni))
-                # iterative refinement for xi
-                xierr=0
-                lastcor=xi
-                lasterr=np.inf
-                for m in range(argsdict['itmax']):
-                    res=(E_omega.dot(vni).astype(np.complex256)-E_n.astype(np.complex256).dot(xi.astype(np.complex256))).astype(np.complex128)
-                    cor=lu_solve((lu2,piv2),res)
-                    xierr=np.linalg.norm(cor,ord=np.inf)/(1+np.linalg.norm(xi,ord=np.inf))
-                    if argsdict['verbose']>2:
-                        print("m=%i xierr=%.3e res=%.3e"%(m,xierr,np.linalg.norm(res)))
-
-                    if xierr<argsdict['epsu'] or xierr>lasterr:
-                        break
-                    xi=xi+cor
-                    lasterr=xierr
                 zeta=lu_solve((lu2,piv2),E_omega.T.dot(wni),trans=1)
-                # iterative refinement for zeta
-                zetaerr=0
-                lastcor=zeta
-                lasterr=np.inf
-                for m in range(argsdict['itmax']):
-                    res=(E_omega.T.dot(wni).astype(np.complex256)-E_n.T.astype(np.complex256).dot(zeta.astype(np.complex256))).astype(np.complex128)
-                    cor=lu_solve((lu2,piv2),res,trans=1)
-                    zetaerr=np.linalg.norm(cor,ord=np.inf)/(1+np.linalg.norm(zeta,ord=np.inf))
-                    if argsdict['verbose']>2:
-                        print("m=%i zetaerr=%.3e res=%.3e"%(m,zetaerr,np.linalg.norm(res)))
-
-                    if zetaerr<argsdict['epsu'] or zetaerr>lasterr:
-                        break
-                    zeta=zeta+cor
-                    lasterr=zetaerr
 
                 vni=xi/np.linalg.norm(xi)*np.abs(xi.dot(np.conjugate(vni)))/(xi.dot(np.conjugate(vni)))
                 wni=zeta/np.linalg.norm(zeta)*np.abs(zeta.dot(np.conjugate(wni)))/(zeta.dot(np.conjugate(wni)))
 
                 ddomega=-E_n.dot(vni).dot(wni)/E_omega.dot(vni).dot(wni)
                 domega+=ddomega
-                if real:
+                if real>0:
                     ddomega=np.real(ddomega)
+                if real<0:
+                    ddomega=1j*np.imag(ddomega)
                 omega+=ddomega
                 E_n,E_omega,E_mu=makesys(omega,argsdict)
 
@@ -407,10 +411,8 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
                     omega=omegaold
                     argsdict[argsdict['par']]=muold
                     E_n,E_omega,E_mu=makesys(omega,argsdict)
-                    ds=ds*(1+np.random.normal(0,argsdict['epsl']))
-                    continue
+                    break
 
-                # if n>2 and ((verr>5*verrlast and verr>argsdict['epsu']) or (muerr>5*muerrlast and muerr>argsdict['epsl']) or (omegaerr>5*omegaerrlast and omegaerr>argsdict['epsl'])):
 
                 if ((verr>5*verrlast and verr>argsdict['epsu']) or (muerr>5*muerrlast and muerr>argsdict['epsl']) or (omegaerr>5*omegaerrlast and omegaerr>argsdict['epsl'])):
                     increases=increases+1
@@ -422,56 +424,46 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
                 muerrlast=muerr
                 omegaerrlast=omegaerr
 
-            # print(verr, omegaerr, muerr, steps, np.abs(mstp))
-            # print(verr<argsdict['epsu'], omegaerr<argsdict['epsl'], muerr<argsdict['epsl'], (steps<5 or np.abs(mstp)<argsdict['epstp']))
             if verr<argsdict['epsu'] and omegaerr<argsdict['epsl'] and muerr<argsdict['epsl'] and (steps<5 or np.abs(mstp)<argsdict['epstp']):
 
                 E_n,E_omega,E_mu=makesys(omega,argsdict)
-                C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
                 b[:-1]=0
                 b[-1]=1
                 #dir0=lu_solve((lu,piv),b)
 
                 dir1=stp/(stp.dot(Theta*stp))**0.5*np.sign(dirs[-1].dot(Theta*stp))
                 dir0=argsdict['stpweight']*dir1+(1-argsdict['stpweight'])*dirs[-1]
+                C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
 
-                # iterative refinement for direction vector
                 direrr=0
                 lastcor=dir0
                 lasterr=np.inf
-
+                cor=np.zeros(2*s+3)
                 for m in range(argsdict['itmax']):
-                    res=(b.astype(np.float128)-C.astype(np.float128).dot(dir0.astype(np.float128))).astype(np.float64)
+                    res=(b-C.dot(dir0))
                     cor=lu_solve((lu,piv),res)
-                    direrr=np.linalg.norm(Theta*cor,ord=np.inf)/(1+np.linalg.norm(Theta*dir0,ord=np.inf))
+                    if real>0:
+                        cor[2*s+1]=0
+                    elif real<0:
+                        cor[2*s]=0
+                    direrr=cor.dot(Theta*cor)
                     if argsdict['verbose']>2:
                         print("m=%i direrr=%.3e res=%.3e"%(m,direrr,np.linalg.norm(res)))
 
-                    if direrr<argsdict['epdir'] or direrr>lasterr:
+                    if direrr<argsdict['epdir'] or (m>3 and direrr>lasterr):
                         break
                     dir0=dir0+cor
+                    dir0=dir0/(dir0.dot(Theta*dir0))**0.5*np.sign(dirs[-1].dot(Theta*dir0))
+                    C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
                     lasterr=direrr
+                    
 
                 dir0=dir0/(dir0.dot(Theta*dir0))**0.5*np.sign(dirs[-1].dot(Theta*dir0))
                 dir1=stp/(stp.dot(Theta*stp))**0.5*np.sign(dirs[-1].dot(Theta*stp))
                 ddir=dir1-dir0
-                # deltadir=np.abs(dir0.dot(ddir)/np.linalg.norm(dir0)**2)
                 deltadir=dir0.dot(Theta*ddir)
                 if argsdict['verbose']>1:
                     print('deltadir=%.3e stp=(%.3f,%.3f,%.3f) newdir=(%.3f, %.3f, %.3f)'%(deltadir,dir1[-3],dir1[-2],dir1[-1],dir0[2*s],dir0[2*s+1],dir0[2*s+2]))
-
-                '''
-                if direrr>argsdict['epdir'] or np.abs(deltadir)>argsdict['epdir']:
-                    # if poor direction vector convergence, use last stp
-                    # dir0=(dirs[-1]+dir1)/2 #Bias to last step...bad for curvature
-                    # dir0=2*dir1-dirs[-1] #Try to extrapolate...may be unstable
-                    print('using stp for dir')
-                    dir0=argsdict['stpweight']*dir1+(1-argsdict['stpweight'])*dirs[-1]
-                    dir0=dir0/(dir0.dot(Theta*dir0))**0.5*np.sign(dirs[-1].dot(Theta*dir0))
-                '''
-                if real:
-                    dir0[2*s+1]=0
-                    dir0=dir0/(dir0.dot(Theta*dir0))**0.5*np.sign(dirs[-1].dot(Theta*dir0))
 
                 steps+=1
                 omegans=omegans+[omega]
@@ -490,7 +482,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
                         scount=0
 
                 if argsdict['verbose']>0:
-                    print("ds=%.3e its=%i %s=%.6f lambda=%.6f+%.6fi stp=(%.3f,%.3f,%.3f) mstp=%.3e"%(ds, n, argsdict['par'], argsdict[argsdict['par']], np.real(omegans[-1]),np.imag(omegans[-1]), stp[-3],stp[-2],stp[-1],mstp))
+                    print("ds=%.3e its=%i %s=%.6f lambda=%.6f+%.6fi stp=(%.3f,%.3f,%.3f) mstp=%.3e"%(ds, n+1, argsdict['par'], argsdict[argsdict['par']], np.real(omegans[-1]),np.imag(omegans[-1]), stp[-3],stp[-2],stp[-1],mstp))
 
             else:
                 scount=0
@@ -514,6 +506,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
         print("Keyboard interrupt!")
     except Exception as e:
         print('stopped early for exception', str(e))
+        traceback.print_exc()
 
     return omegans,vns,wns,parns,dirs,dss
 
@@ -548,8 +541,8 @@ parser.add_argument("--epsl", type=float, required=False, default=1e-4, dest='ep
 parser.add_argument("--lambdamax", type=float, required=False, default=np.inf, dest='lambdamax', help='Maximum eigenvalue norm')
 parser.add_argument("--epstp", type=float, required=False, default=1E0, dest='epstp', help='Step direction tolerance')
 parser.add_argument("--epdir", type=float, required=False, default=1E-3, dest='epdir', help='Direction vector tolerance')
-parser.add_argument("--thl", type=float, required=False, default=1, dest='thl', help='Pseudoarclength weight for parameters and eigenvalues.')
-parser.add_argument("--thmu", type=float, required=False, default=1, dest='thmu', help='Pseudoarclength weight for parameters and eigenvalues.')
+parser.add_argument("--thl", type=float, required=False, default=1, dest='thl', help='Pseudoarclength weight for eigenvalues.')
+parser.add_argument("--thmu", type=float, required=False, default=1, dest='thmu', help='Pseudoarclength weight for parameters.')
 parser.add_argument("--thu", type=float, required=False, default=1E-3, dest='thu', help='Pseudoarclength weight for eigenvectors.')
 parser.add_argument("--stpweight", type=float, required=False, default=1, dest='stpweight', help='Weight for previous step.')
 parser.add_argument("--verbose", type=int, required=False, default=True,
