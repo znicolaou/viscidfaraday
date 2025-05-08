@@ -259,41 +259,19 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
     C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
 
     if dir is None:    
-        dir0=np.zeros(2*s+3)
         dir0=lu_solve((lu,piv),b)
         dir0=dir0/(dir0.dot(Theta*dir0))**0.5
         if argsdict['verbose']>0:
             print("newdir=(%.3f,%.3f,%.3f)"%(dir0[2*s],dir0[2*s+1],dir0[2*s+2]))
 
-        dirs=[dir0.copy()]
     else:
         dir0=dir.copy()
         dir0=dir0/(dir0.dot(Theta*dir0))**0.5
-        dirs=[dir0.copy()]
-
-    direrr=0
-    lastcor=dir0
-    lasterr=np.inf
-    cor=np.zeros(2*s+3)
-    for m in range(argsdict['itmax']):
-        res=(b-C.dot(dir0))
-        cor=lu_solve((lu,piv),res)
-        if real>0:
-            cor[2*s+1]=0
-        elif real<0:
-            cor[2*s]=0
-        direrr=cor.dot(Theta*cor)
-        if argsdict['verbose']>2:
-            print("m=%i direrr=%.3e res=%.3e"%(m,direrr,np.linalg.norm(res)))
-
-#         if direrr<argsdict['epdir'] or (m>3 and direrr>lasterr):
-        if (m>3 and direrr>lasterr):
-            break
-        dir0=dir0+cor
-        dir0=dir0/(dir0.dot(Theta*dir0))**0.5
-        C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
-        lasterr=direrr
-
+        if argsdict['verbose']>0:
+            print("newdir=(%.3f,%.3f,%.3f)"%(dir0[2*s],dir0[2*s+1],dir0[2*s+2]))
+    C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
+    
+    dirs=[dir0.copy()]
     scount=0
     steps=0
     try:
@@ -338,21 +316,6 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
                 C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
                 delta=np.zeros(2*s+3)
                 delta=lu_solve((lu,piv),b)
-                # iterative refinement for delta
-#                 deltaerr=0
-#                 lastcor=delta.copy()
-#                 lasterr=np.inf
-#                 cor=np.zeros(2*s+3)
-#                 for m in range(argsdict['itmax']):
-#                     res=(b-C.dot(delta))
-#                     cor=lu_solve((lu,piv),res)
-#                     deltaerr=np.linalg.norm(cor,ord=np.inf)/(1+np.linalg.norm(delta,ord=np.inf))
-#                     if argsdict['verbose']>2:
-#                         print("m=%i deltaerr=%.3e res=%.3e"%(m,deltaerr,np.linalg.norm(res)))
-#                     if deltaerr<argsdict['epsu'] or deltaerr>lasterr:
-#                         break
-#                     delta=delta+cor
-#                     lasterr=deltaerr.copy()
                 
                 if real>0:
                     delta[2*s+1]=0
@@ -429,11 +392,11 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
                 E_n,E_omega,E_mu=makesys(omega,argsdict)
                 b[:-1]=0
                 b[-1]=1
-                #dir0=lu_solve((lu,piv),b)
 
                 dir1=stp/(stp.dot(Theta*stp))**0.5*np.sign(dirs[-1].dot(Theta*stp))
                 dir0=argsdict['stpweight']*dir1+(1-argsdict['stpweight'])*dirs[-1]
                 C,lu,piv=makejac(np.conjugate(vni),E_n,E_omega.dot(vni),E_mu.dot(vni),dir0)
+                
 
                 direrr=0
                 lastcor=dir0
@@ -459,6 +422,11 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
                     
 
                 dir0=dir0/(dir0.dot(Theta*dir0))**0.5*np.sign(dirs[-1].dot(Theta*dir0))
+                
+                if not os.path.exists('C1.npy'):
+                    np.save('C1.npy',C)
+                    np.save('b1.npy',b)
+                    np.save('dir1.npy',dir0)
                 dir1=stp/(stp.dot(Theta*stp))**0.5*np.sign(dirs[-1].dot(Theta*stp))
                 ddir=dir1-dir0
                 deltadir=dir0.dot(Theta*ddir)
@@ -553,6 +521,7 @@ parser.add_argument("--parf", type=float, required=False, default=0.15, dest='pa
 parser.add_argument("--continue", type=int, nargs=2, required=False, default=None, dest='continue', help='Branch and step index for continuation.')
 parser.add_argument("--branch", type=int, required=False, default=None, dest='branch', help='Branch id for continuation.')
 parser.add_argument("--mode", type=int, required=False, default=0, dest='mode', help='Mode id for continuation.')
+
 if __name__=="__main__":
     start=timeit.default_timer()
     parser.add_argument("--filebase", type=str, required=True, dest='filebase', help='Base string for file output.')
