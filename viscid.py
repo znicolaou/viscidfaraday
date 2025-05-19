@@ -12,6 +12,13 @@ from scipy.interpolate import interp1d
 from scipy.optimize import minimize_scalar
 
 def makeindices (argsdict):
+    """
+    Compute the indices for the inviscid and undriven matrices.
+    Args:
+        argsdict (dict): dictionary of parameters
+    Returns:
+        indices (list): list of indices for the inviscid and undriven matrices
+    """
     lps = np.arange(-argsdict['Nt'], argsdict['Nt'] + 1)[np.newaxis, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
     ls = np.arange(-argsdict['Nt'], argsdict['Nt'] + 1)[np.newaxis, np.newaxis, np.newaxis, np.newaxis, np.newaxis, :, np.newaxis, np.newaxis]
     mps = np.arange(-argsdict['Nx'], argsdict['Nx'] + 1)[np.newaxis, np.newaxis, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
@@ -23,7 +30,84 @@ def makeindices (argsdict):
 
     return indices
 
-def viscid_mat2d (omega, argsdict):
+def inviscid_mats_undriven (argsdict):
+    """
+    Compute the flattened inviscid and undriven matrices for the given parameters.
+    Args:
+        omega (float): frequency
+        argsdict (dict): dictionary of parameters
+    Returns:
+        F (ndarray): matrix of size ((2*Nx+1)*(2*Ny+1),(2*Nx+1)*(2*Ny+1))
+        G (ndarray): matrix of size ((2*Nx+1)*(2*Ny+1),(2*Nx+1)*(2*Ny+1))
+    """
+    lps,ls,mps,ms,nps,ns=makeindices(argsdict)
+
+    kappax = argsdict['kx'] + argsdict['k1x']*ms + argsdict['k2x']*ns
+    kappay = argsdict['ky'] + argsdict['k1y']*ms + argsdict['k2y']*ns
+    kappapx = argsdict['kx'] + argsdict['k1x']*mps + argsdict['k2x']*nps
+    kappapy = argsdict['ky'] + argsdict['k1y']*mps + argsdict['k2y']*nps
+    kappa = (kappax**2+kappay**2)**0.5
+
+    C = (np.exp(-kappa*argsdict['h0']) * iv(ms-mps, kappa*argsdict['As']*0.5) * iv(ns-nps, kappa*argsdict['As']*0.5) + np.exp(kappa*argsdict['h0']) * iv(ms-mps, -kappa*argsdict['As']*0.5) * iv(ns-nps, -kappa*argsdict['As']*0.5))
+    S = (- np.exp(-kappa*argsdict['h0']) * iv(ms-mps, kappa*argsdict['As']*0.5) * iv(ns-nps, kappa*argsdict['As']*0.5) + np.exp(kappa*argsdict['h0']) * iv(ms-mps, -kappa*argsdict['As']*0.5) * iv(ns-nps, -kappa*argsdict['As']*0.5))
+
+    F=kappa*(argsdict['g']+argsdict['sigma']/argsdict['rho']*kappa**2)*(1-(kappax*(kappax-kappapx)+kappay*(kappay-kappapy))/kappa**2)*S
+    G=(1-(kappax*(kappax-kappapx)+kappay*(kappay-kappapy))/kappa**2)*C
+    n_flat=np.prod((1,1,2*argsdict['Nx']+1,2*argsdict['Ny']+1))
+
+    return F.reshape((n_flat,n_flat)),G.reshape((n_flat,n_flat))
+
+def inviscid_mats (argsdict):
+    """
+    Compute the flattened inviscid and undriven matrices for the given parameters.
+    Args:
+        omega (float): frequency
+        argsdict (dict): dictionary of parameters
+    Returns:
+        E (ndarray): matrix of size ((2*Nt+1)*(2*Nx+1)*(2*Ny+1),(2*Nt+1)*(2*Nx+1)*(2*Ny+1))
+        F (ndarray): matrix of size ((2*Nt+1)*(2*Nx+1)*(2*Ny+1),(2*Nt+1)*(2*Nx+1)*(2*Ny+1))
+        G (ndarray): matrix of size ((2*Nt+1)*(2*Nx+1)*(2*Ny+1),(2*Nt+1)*(2*Nx+1)*(2*Ny+1))
+    """
+    lps,ls,mps,ms,nps,ns=makeindices(argsdict)
+
+    kappax = argsdict['kx'] + argsdict['k1x']*ms + argsdict['k2x']*ns
+    kappay = argsdict['ky'] + argsdict['k1y']*ms + argsdict['k2y']*ns
+    kappapx = argsdict['kx'] + argsdict['k1x']*mps + argsdict['k2x']*nps
+    kappapy = argsdict['ky'] + argsdict['k1y']*mps + argsdict['k2y']*nps
+    kappa = (kappax**2+kappay**2)**0.5
+
+    C = (np.exp(-kappa*argsdict['h0']) * iv(ms-mps, kappa*argsdict['As']*0.5) * iv(ns-nps, kappa*argsdict['As']*0.5) + np.exp(kappa*argsdict['h0']) * iv(ms-mps, -kappa*argsdict['As']*0.5) * iv(ns-nps, -kappa*argsdict['As']*0.5))
+    S = (- np.exp(-kappa*argsdict['h0']) * iv(ms-mps, kappa*argsdict['As']*0.5) * iv(ns-nps, kappa*argsdict['As']*0.5) + np.exp(kappa*argsdict['h0']) * iv(ms-mps, -kappa*argsdict['As']*0.5) * iv(ns-nps, -kappa*argsdict['As']*0.5))
+
+    E1=kappa*(argsdict['g']+argsdict['sigma']/argsdict['rho']*kappa**2)*(1-(kappax*(kappax-kappapx)+kappay*(kappay-kappapy))/kappa**2)*S
+    F1=(1-(kappax*(kappax-kappapx)+kappay*(kappay-kappapy))/kappa**2)*C
+    G1=kappa*(argsdict['g'])*(1-(kappax*(kappax-kappapx)+kappay*(kappay-kappapy))/kappa**2)*S
+
+    n_flat=np.prod((1,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1))
+
+    E=np.zeros((1,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1,1,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1),dtype=np.complex128)
+    F=np.zeros((1,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1,1,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1),dtype=np.complex128)
+    G=np.zeros((1,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1,1,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1),dtype=np.complex128)
+
+    for lind in range(2*argsdict['Nt']+1):
+        E[0,lind,:,:,0,lind,:,:]=E1[0,0,:,:,0,0,:,:]
+        F[0,lind,:,:,0,lind,:,:]=F1[0,0,:,:,0,0,:,:]
+    for lind in range(2*argsdict['Nt']):
+        G[0,lind,:,:,0,lind+1,:,:]=G1[0,0,:,:,0,0,:,:]
+        G[0,lind+1,:,:,0,lind,:,:]=G1[0,0,:,:,0,0,:,:]
+
+    return E.reshape((n_flat,n_flat)),F.reshape((n_flat,n_flat)),G.reshape((n_flat,n_flat))
+
+def viscid_mats (omega, argsdict):
+    """
+    Compute the flattened viscous matrices for the given parameters.
+    Args:
+        omega (float): frequency
+        argsdict (dict): dictionary of parameters
+    Returns:
+        Etilde (ndarray): matrix of size (3*(2*Nt+1)*(2*Nx+1)*(2*Ny+1),3*(2*Nt+1)*(2*Nx+1)*(2*Ny+1))
+        Gtilde (ndarray): matrix of size (3*(2*Nt+1)*(2*Nx+1)*(2*Ny+1),3*(2*Nt+1)*(2*Nx+1)*(2*Ny+1))
+    """
     lps,ls,mps,ms,nps,ns=makeindices(argsdict)
     kappax = (argsdict['kx'] + argsdict['k1x']*ms + argsdict['k2x']*ns)
     kappay = (argsdict['ky'] + argsdict['k1y']*ms + argsdict['k2y']*ns)
@@ -58,83 +142,49 @@ def viscid_mat2d (omega, argsdict):
     rfac0=EmOmega
     rfac1=EmOmega
     rfac2=1
-    E=np.zeros((3,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1,3,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1),dtype=np.complex128)
+    Etilde=np.zeros((3,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1,3,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1),dtype=np.complex128)
     for lind in range(2*argsdict['Nt']+1):
-        E[0,lind,:,:,0,lind,:,:]=(vals00*rfac0)[0,0,:,:,0,lind,:,:]
-        E[0,lind,:,:,1,lind,:,:]=(vals01*rfac1)[0,0,:,:,0,lind,:,:]
-        E[0,lind,:,:,2,lind,:,:]=(vals02*rfac2)[0,0,:,:,0,lind,:,:]
-        E[1,lind,:,:,0,lind,:,:]=(vals10*rfac0)[0,0,:,:,0,lind,:,:]
-        E[1,lind,:,:,1,lind,:,:]=(vals11*rfac1)[0,0,:,:,0,lind,:,:]
-        E[1,lind,:,:,2,lind,:,:]=(vals12*rfac2)[0,0,:,:,0,lind,:,:]
-        E[2,lind,:,:,0,lind,:,:]=(vals20*rfac0)[0,0,:,:,0,lind,:,:]
-        E[2,lind,:,:,1,lind,:,:]=(vals21*rfac1)[0,0,:,:,0,lind,:,:]
-        E[2,lind,:,:,2,lind,:,:]=(vals22*rfac2)[0,0,:,:,0,lind,:,:]
+        Etilde[0,lind,:,:,0,lind,:,:]=(vals00*rfac0)[0,0,:,:,0,lind,:,:]
+        Etilde[0,lind,:,:,1,lind,:,:]=(vals01*rfac1)[0,0,:,:,0,lind,:,:]
+        Etilde[0,lind,:,:,2,lind,:,:]=(vals02*rfac2)[0,0,:,:,0,lind,:,:]
+        Etilde[1,lind,:,:,0,lind,:,:]=(vals10*rfac0)[0,0,:,:,0,lind,:,:]
+        Etilde[1,lind,:,:,1,lind,:,:]=(vals11*rfac1)[0,0,:,:,0,lind,:,:]
+        Etilde[1,lind,:,:,2,lind,:,:]=(vals12*rfac2)[0,0,:,:,0,lind,:,:]
+        Etilde[2,lind,:,:,0,lind,:,:]=(vals20*rfac0)[0,0,:,:,0,lind,:,:]
+        Etilde[2,lind,:,:,1,lind,:,:]=(vals21*rfac1)[0,0,:,:,0,lind,:,:]
+        Etilde[2,lind,:,:,2,lind,:,:]=(vals22*rfac2)[0,0,:,:,0,lind,:,:]
 
     vals02 = -1j*(argsdict['rho']**2*kappapx*C/(4*(argsdict['rho']*Omega+argsdict['mu']*kappa**2)))
     vals12 = -1j*(argsdict['rho']**2*kappapy*C/(4*(argsdict['rho']*Omega + argsdict['mu']*kappa**2)))
     vals22 = (argsdict['rho']**2*(kappax*kappapx+kappay*kappapy)*S/(4*kappa*(argsdict['rho']*Omega + argsdict['mu']*kappa**2)))
-    F=np.zeros((3,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1,3,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1),dtype=np.complex128)
+    Gtilde=np.zeros((3,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1,3,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1),dtype=np.complex128)
     for lind in range(2*argsdict['Nt']):
-        F[0,lind,:,:,2,lind+1,:,:]+=argsdict['g']*(vals02*rfac2)[0,0,:,:,0,lind+1,:,:]
-        F[1,lind,:,:,2,lind+1,:,:]+=argsdict['g']*(vals12*rfac2)[0,0,:,:,0,lind+1,:,:]
-        F[2,lind,:,:,2,lind+1,:,:]+=argsdict['g']*(vals22*rfac2)[0,0,:,:,0,lind+1,:,:]
-        F[0,lind+1,:,:,2,lind,:,:]+=argsdict['g']*(vals02*rfac2)[0,0,:,:,0,lind,:,:]
-        F[1,lind+1,:,:,2,lind,:,:]+=argsdict['g']*(vals12*rfac2)[0,0,:,:,0,lind,:,:]
-        F[2,lind+1,:,:,2,lind,:,:]+=argsdict['g']*(vals22*rfac2)[0,0,:,:,0,lind,:,:]
+        Gtilde[0,lind,:,:,2,lind+1,:,:]+=argsdict['g']*(vals02*rfac2)[0,0,:,:,0,lind+1,:,:]
+        Gtilde[1,lind,:,:,2,lind+1,:,:]+=argsdict['g']*(vals12*rfac2)[0,0,:,:,0,lind+1,:,:]
+        Gtilde[2,lind,:,:,2,lind+1,:,:]+=argsdict['g']*(vals22*rfac2)[0,0,:,:,0,lind+1,:,:]
+        Gtilde[0,lind+1,:,:,2,lind,:,:]+=argsdict['g']*(vals02*rfac2)[0,0,:,:,0,lind,:,:]
+        Gtilde[1,lind+1,:,:,2,lind,:,:]+=argsdict['g']*(vals12*rfac2)[0,0,:,:,0,lind,:,:]
+        Gtilde[2,lind+1,:,:,2,lind,:,:]+=argsdict['g']*(vals22*rfac2)[0,0,:,:,0,lind,:,:]
     n_flat=np.prod((3,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1))
-    return E.reshape((n_flat,n_flat)),F.reshape((n_flat,n_flat))
-
-def inviscid_mat_undriven (argsdict):
-    lps,ls,mps,ms,nps,ns=makeindices(argsdict)
-
-    kappax = argsdict['kx'] + argsdict['k1x']*ms + argsdict['k2x']*ns
-    kappay = argsdict['ky'] + argsdict['k1y']*ms + argsdict['k2y']*ns
-    kappapx = argsdict['kx'] + argsdict['k1x']*mps + argsdict['k2x']*nps
-    kappapy = argsdict['ky'] + argsdict['k1y']*mps + argsdict['k2y']*nps
-    kappa = (kappax**2+kappay**2)**0.5
-
-    C = (np.exp(-kappa*argsdict['h0']) * iv(ms-mps, kappa*argsdict['As']*0.5) * iv(ns-nps, kappa*argsdict['As']*0.5) + np.exp(kappa*argsdict['h0']) * iv(ms-mps, -kappa*argsdict['As']*0.5) * iv(ns-nps, -kappa*argsdict['As']*0.5))
-    S = (- np.exp(-kappa*argsdict['h0']) * iv(ms-mps, kappa*argsdict['As']*0.5) * iv(ns-nps, kappa*argsdict['As']*0.5) + np.exp(kappa*argsdict['h0']) * iv(ms-mps, -kappa*argsdict['As']*0.5) * iv(ns-nps, -kappa*argsdict['As']*0.5))
-
-    F=kappa*(argsdict['g']+argsdict['sigma']/argsdict['rho']*kappa**2)*(1-(kappax*(kappax-kappapx)+kappay*(kappay-kappapy))/kappa**2)*S
-    G=(1-(kappax*(kappax-kappapx)+kappay*(kappay-kappapy))/kappa**2)*C
-    n_flat=np.prod((1,1,2*argsdict['Nx']+1,2*argsdict['Ny']+1))
-
-    return F.reshape((n_flat,n_flat)),G.reshape((n_flat,n_flat))
-
-def inviscid_mat (argsdict):
-    lps,ls,mps,ms,nps,ns=makeindices(argsdict)
-
-    kappax = argsdict['kx'] + argsdict['k1x']*ms + argsdict['k2x']*ns
-    kappay = argsdict['ky'] + argsdict['k1y']*ms + argsdict['k2y']*ns
-    kappapx = argsdict['kx'] + argsdict['k1x']*mps + argsdict['k2x']*nps
-    kappapy = argsdict['ky'] + argsdict['k1y']*mps + argsdict['k2y']*nps
-    kappa = (kappax**2+kappay**2)**0.5
-
-    C = (np.exp(-kappa*argsdict['h0']) * iv(ms-mps, kappa*argsdict['As']*0.5) * iv(ns-nps, kappa*argsdict['As']*0.5) + np.exp(kappa*argsdict['h0']) * iv(ms-mps, -kappa*argsdict['As']*0.5) * iv(ns-nps, -kappa*argsdict['As']*0.5))
-    S = (- np.exp(-kappa*argsdict['h0']) * iv(ms-mps, kappa*argsdict['As']*0.5) * iv(ns-nps, kappa*argsdict['As']*0.5) + np.exp(kappa*argsdict['h0']) * iv(ms-mps, -kappa*argsdict['As']*0.5) * iv(ns-nps, -kappa*argsdict['As']*0.5))
-
-    F=kappa*(argsdict['g']+argsdict['sigma']/argsdict['rho']*kappa**2)*(1-(kappax*(kappax-kappapx)+kappay*(kappay-kappapy))/kappa**2)*S
-    G=(1-(kappax*(kappax-kappapx)+kappay*(kappay-kappapy))/kappa**2)*C
-    F2=kappa*(argsdict['g'])*(1-(kappax*(kappax-kappapx)+kappay*(kappay-kappapy))/kappa**2)*S
-
-    n_flat=np.prod((1,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1))
-
-    E1=np.zeros((1,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1,1,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1),dtype=np.complex128)
-    E2=np.zeros((1,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1,1,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1),dtype=np.complex128)
-    E3=np.zeros((1,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1,1,2*argsdict['Nt']+1,2*argsdict['Nx']+1,2*argsdict['Ny']+1),dtype=np.complex128)
-
-    for lind in range(2*argsdict['Nt']+1):
-        E1[0,lind,:,:,0,lind,:,:]=F[0,0,:,:,0,0,:,:]
-        E2[0,lind,:,:,0,lind,:,:]=G[0,0,:,:,0,0,:,:]
-    for lind in range(2*argsdict['Nt']):
-        E3[0,lind,:,:,0,lind+1,:,:]=F2[0,0,:,:,0,0,:,:]
-        E3[0,lind+1,:,:,0,lind,:,:]=F2[0,0,:,:,0,0,:,:]
-
-    return E1.reshape((n_flat,n_flat)),E2.reshape((n_flat,n_flat)),E3.reshape((n_flat,n_flat))
+    return Etilde.reshape((n_flat,n_flat)),Gtilde.reshape((n_flat,n_flat))
 
 #Rayleigh quotient iterations
-def rayleigh_mat(omega_0, v0, w0, mat, argsdict, mat2=None):
+def rayleigh_mat(omega_0, v0, w0, mat, argsdict, mat_omega=None):
+    """
+    Compute Rayleigh quotient iterations for the given matrix, 
+    initial eigenvalue and eigenvectors, and parameters.
+    Args:
+        omega_0 (float): initial eigenvalue
+        v0 (ndarray): initial eigenvector
+        w0 (ndarray): initial adjoint eigenvector
+        mat (function): function to compute the matrix
+        argsdict (dict): dictionary of parameters
+        mat_omega (function, optional): function to compute the derivative of the matrix with respect to omega
+    Returns:
+        omegas (list): list of eigenvalues
+        vns (list): list of eigenvectors
+        wns (list): list of adjoint eigenvectors
+    """
     vn=v0
     wn=w0
 
@@ -143,12 +193,12 @@ def rayleigh_mat(omega_0, v0, w0, mat, argsdict, mat2=None):
     wns=[w0]
     omega=omega_0
     for n in range(argsdict['itmax']):
-        if mat2 is None:
+        if mat_omega is None:
             E_n=mat(omega, argsdict)
             dE = (mat(omega+argsdict['domega_fd'],argsdict)-mat(omega-argsdict['domega_fd'],argsdict))/(2*argsdict['domega_fd'])
         else:
             E_n=mat(omega, argsdict)
-            dE=mat2(omega, argsdict)
+            dE=mat_omega(omega, argsdict)
         domega=-E_n.dot(vn).dot(wn)/dE.dot(vn).dot(wn)
         lu,piv=lu_factor(E_n)
         xi=lu_solve((lu,piv),-domega*dE.dot(vn))
@@ -176,7 +226,26 @@ def rayleigh_mat(omega_0, v0, w0, mat, argsdict, mat2=None):
     return omegas,vns,wns
 
 #pseudoarclength continuation with rayleigh quotient refinement
-def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir=None,real=0):
+def pseudocont(omega, v, w, mat, argsdict, mat_omega=None, mat_mu=None, Theta=None, dir=None,real=0):
+    """
+    Perform pseudoarclength continuation for the given matrix, 
+    initial eigenvalue and eigenvectors, and parameters.
+    Args:
+        omega (float): initial eigenvalue
+        v (ndarray): initial eigenvector
+        w (ndarray): initial adjoint eigenvector
+        mat (function): function to compute the matrix
+        argsdict (dict): dictionary of parameters
+        mat_omega (function, optional): function to compute the derivative of the matrix with respect to omega
+        mat_mu (function, optional): function to compute the derivative of the matrix with respect to mu
+        Theta (ndarray, optional): array of scaling factors for the direction vector
+        dir (ndarray, optional): initial direction vector
+        real (int, optional): flag to constrain real or imaginary direction continuation
+    Returns:
+        omegas (list): list of eigenvalues
+        vns (list): list of eigenvectors
+        wns (list): list of adjoint eigenvectors
+    """
     omegans=[omega]
     vns=[v.copy()]
     wns=[w.copy()]
@@ -189,11 +258,11 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
 
     def makesys(omega,argsdict):
         E_n=mat(omega,argsdict)
-        if mat2 is None:
+        if mat_omega is None:
             E_omega = (mat(omega+argsdict['domega_fd'],argsdict)-mat(omega-argsdict['domega_fd'],argsdict))/(2*argsdict['domega_fd'])
         else:
-            E_omega = mat2(omega,argsdict)
-        if mat3 is None:
+            E_omega = mat_omega(omega,argsdict)
+        if mat_mu is None:
             par0 = argsdict[argsdict['par']]
             argsdict[argsdict['par']] = par0+argsdict['dmu_fd']
             E_mup = mat(omega,argsdict)
@@ -202,7 +271,7 @@ def pseudocont(omega, v, w, mat, argsdict, mat2=None, mat3=None, Theta=None, dir
             E_mu = (E_mup-E_mum)/(2*argsdict['dmu_fd'])
             argsdict[argsdict['par']] = par0
         else:
-            E_mu = mat3(omega,argsdict)
+            E_mu = mat_mu(omega,argsdict)
         return E_n,E_omega,E_mu
 
     E_n,E_omega,E_mu=makesys(omega,argsdict)
@@ -525,7 +594,7 @@ if __name__=="__main__":
     argsdict=args.__dict__.copy()
     lps,ls,mps,ms,nps,ns=makeindices(argsdict)
     def mat(omega,argsdict):
-        E,F=viscid_mat2d(omega,argsdict)
+        E,F=viscid_mats(omega,argsdict)
         return (E-argsdict['ad']*F).T
 
     s=3*(2*argsdict['Nt']+1)*(2*argsdict['Nx']+1)*(2*argsdict['Ny']+1)
@@ -596,7 +665,7 @@ if __name__=="__main__":
     else:
         if br is None:
             br=nextbr
-        F,G=inviscid_mat_undriven(argsdict)
+        F,G=inviscid_mats_undriven(argsdict)
         evals,revecs,levecs=eig(F.astype(complex),G.astype(complex),right=True,left=True)
         order=np.argsort(evals)
         omega=evals[order[argsdict['mode']]]**0.5+1j*0
